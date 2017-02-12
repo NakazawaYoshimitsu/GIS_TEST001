@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>地理情報システム(GIS Tiles on OpenLayers 3)</title>
+<!--
+<script src="https://code.jquery.com/jquery-1.11.2.min.js"></script>
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+-->
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+<link rel="stylesheet" href="http://openlayers.org/en/v3.10.1/css/ol.css" type="text/css">
+<script src="http://openlayers.org/en/v3.10.1/build/ol.js"></script>
+<script src="ol3ex1.js" type="text/javascript"></script>
+
+<style>
+  body {padding: 20; margin: 20}
+  html, body, #map {height: 92%; width: 92%;}
+</style>
+</head>
+
+<body>
+<h1>地理情報システム(GIS on OpenLayers 3)</h1>
+
+<p>GIS（Geographic Information System：地理情報システム）とは、位置や空間に関する様々な情報を、コンピュータを用いて重ね合わせ、情報の分析・解析をおこなったり、情報を視覚的に表示させるシステムです。<br>
+このページはGeeklab Naganoがテスト的に作成したページで地図上にコメントを記載できるようにしたものです。地図上でクリックをするとコメントの入力が行えます。
+</p>
+
+OpenLayers 3<br>
+<a href="http://openlayers.org/" target="_blank">http://openlayers.org/</a><br><br>
+
+<div id="map_canvas" style="width: 100%; height: 97%; position:absolute; top:25px; left:0px; font-size:100%;"></div>
+&nbsp;マウスがクリックされた座標：<span id="outStr"></span>
+
+<div id="map"></div>
+<script>
+  // 経度と緯度を変換する
+  function convertCoordinate(longitude, latitude)
+  {
+    return ol.proj.transform([longitude, latitude], "EPSG:4326","EPSG:900913");
+  }
+
+  // imgSrc（マーカー）をcoordinate（指定した経度と緯度）に配置する情報を作成する
+  function makeMarkerOverlay(imgSrc, coordinate)
+  {
+    var imgElement = document.createElement('img');
+    imgElement.setAttribute('src', imgSrc);
+    var markerOverlay = new ol.Overlay({
+                                        element: imgElement,
+                                        position: coordinate,
+                                        positioning: 'bottom-center'
+                                      });
+    return markerOverlay;
+  }
+
+  // text（文字列）をcoordinate（指定した経度と緯度）に配置する情報を作成する
+  function makeTextOverlay(text, coordinate)
+  {
+    var textElement = document.createElement('div');
+    textElement.innerHTML = text;
+    var markerOverlay = new ol.Overlay({
+                                        element: textElement,
+                                        position: coordinate,
+                                        positioning: 'top-center'
+                                      });
+    return markerOverlay;
+  }
+
+  var defaultStyle = {
+    'Point': [new ol.style.Style({
+      image: new ol.style.Circle({
+        fill: new ol.style.Fill({
+          color: 'rgba(255,255,0,0.5)'
+        }),
+        radius: 5,
+        stroke: new ol.style.Stroke({
+          color: '#ff0',
+          width: 1
+        })
+      })
+    })],
+    'LineString': [new ol.style.Style({
+      stroke: new ol.style.Stroke({
+        color: '#f00',
+        width: 3
+      })
+    })],
+    'Polygon': [new ol.style.Style({
+      fill: new ol.style.Fill({
+        color: 'rgba(0,255,255,0.5)'
+      }),
+      stroke: new ol.style.Stroke({
+        color: '#0ff',
+        width: 1
+      })
+    })],
+    'MultiPoint': [new ol.style.Style({
+      image: new ol.style.Circle({
+        fill: new ol.style.Fill({
+          color: 'rgba(255,0,255,0.5)'
+        }),
+        radius: 5,
+        stroke: new ol.style.Stroke({
+          color: '#f0f',
+          width: 1
+        })
+      })
+    })],
+    'MultiLineString': [new ol.style.Style({
+      stroke: new ol.style.Stroke({
+        color: '#0f0',
+        width: 3
+      })
+    })],
+    'MultiPolygon': [new ol.style.Style({
+      fill: new ol.style.Fill({
+        color: 'rgba(0,0,255,0.5)'
+      }),
+      stroke: new ol.style.Stroke({
+        color: '#00f',
+        width: 1
+      })
+    })]
+  };
+
+  var styleFunction = function(feature, resolution) {
+    var featureStyleFunction = feature.getStyleFunction();
+    if (featureStyleFunction) {
+      return featureStyleFunction.call(feature, resolution);
+    } else {
+      return defaultStyle[feature.getGeometry().getType()];
+    }
+  };
+
+  var dragAndDropInteraction = new ol.interaction.DragAndDrop({
+    formatConstructors: [
+      ol.format.GPX,
+      ol.format.GeoJSON,
+      ol.format.IGC,
+      ol.format.KML,
+      ol.format.TopoJSON
+    ]
+  });
+
+  //===== GSI Map
+  var map = new ol.Map({
+    target: "map",
+    renderer: ['canvas', 'dom'],
+    layers: [
+      new ol.layer.Tile({
+        source: new ol.source.XYZ({
+          attributions: [
+            new ol.Attribution({
+              html: "<a href='http://maps.gsi.go.jp/development/ichiran.html' target='_blank'>地理院タイル</a>"
+            })
+          ],
+          url: "http://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",
+          projection: "EPSG:3857"
+        })
+      })
+    ],
+    controls: ol.control.defaults({
+      attributionOptions: ({
+        collapsible: false
+      })
+    }),
+    view: new ol.View({
+      projection: "EPSG:3857",
+      //center: ol.proj.transform([138.7313889, 35.3622222], "EPSG:4326", "EPSG:3857"),
+      center: ol.proj.transform([139.64241027, 35.3622222], "EPSG:4326", "EPSG:3857"),
+      maxZoom: 18,
+      zoom: 9
+      })
+  });
+
+  dragAndDropInteraction.on( 'addfeatures', function( event ) {
+    var vectorSource = new ol.source.Vector({
+      features: event.features
+    });
+    map.addLayer( new ol.layer.Vector({
+      source: vectorSource,
+      style: styleFunction
+    }));
+    map.getView().fit( 
+      vectorSource.getExtent(), /** @type {ol.Size} */ ( map.getSize() ) );
+  });
+
+  var displayFeatureInfo = function( pixel )
+  {
+    var features = [];
+    map.forEachFeatureAtPixel( pixel, function( feature, layer )
+    {
+      features.push(feature);
+    });
+    if ( features.length > 0 )
+    {
+      var info = [];
+      var i, ii;
+      for ( i = 0, ii = features.length; i < ii; ++i)  {
+        info.push(features[i].get('name'));
+      }
+      document.getElementById('info').innerHTML = info.join(', ') || '&nbsp';
+    }
+    else
+    {
+      document.getElementById('info').innerHTML = '&nbsp;';
+    }
+  };
+
+  map.on( 'pointermove', function( evt ) {
+    // 入力ダイアログを表示 ＋ 入力内容を user に代入
+    if ( evt.dragging ) {
+      return;
+    }
+    var pixel = map.getEventPixel( evt.originalEvent );
+    displayFeatureInfo( pixel );
+  });
+
+  // マップのクリックイベント
+  map.on( 'click', function( evt ) {
+
+    // クリックした座標を取得する 取得した座標はoutstr[0]：（経度）、outstr[1]：（緯度）に設定される
+    var initPrecision = 8; // 座標表示の小数点以下の桁数の初期値
+    var coordinate = evt.coordinate;
+    var stringifyFunc = ol.coordinate.createStringXY(initPrecision);
+    //var outstr = stringifyFunc(ol.proj.transform(coordinate, "EPSG:3857", "EPSG:4326"));
+    var outstr = ol.proj.transform(coordinate, "EPSG:3857", "EPSG:4326");
+    document.getElementById('outStr').innerHTML = outstr;
+
+    // window.promptを使用して、ポップアップ画面を表示する（userに入力した文字列を設定しておく）
+    user = window.prompt("マーカーの下に入力したコメントが表示されます。", "コメントを入力してください。");
+
+    // キャンセルでもない、未入力でもない場合
+    if(user != "" && user != null)
+    {
+
+      // ファンクション（convertCoordinate）を呼び、coordinateB に経度と緯度を設定しておく
+      var coordinateB = convertCoordinate(outstr[0], outstr[1]);
+
+      // ファンクション（makeMarkerOverlay）を呼び、markerB にクリックした経度と緯度にマーカー配置情報を設定しておく
+      var markerB = makeMarkerOverlay('red-dot.png', coordinateB);
+
+      // ファンクション（makeTextOverlay）を呼び、textA にクリックした経度と緯度に入力したtextの配置情報を設定しておく
+      var textB = makeTextOverlay(user, coordinateB);
+
+      // マーカーの配置情報を地図上に描画する
+      map.addOverlay(markerB);
+
+      // textの配置情報を地図上に描画する
+      map.addOverlay(textB);
+    }
+
+    // キャンセル、または未入力の場合
+    else
+    {
+      // メッセージボックスを表示する
+      window.alert('コメントを入力しなければ、マーカーは付きません。');
+    }
+
+    displayFeatureInfo( evt.pixel );
+  });
+
+</script>
+<br>
+<br>
+</body>
+</html>
